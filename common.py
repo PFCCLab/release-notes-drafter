@@ -19,32 +19,39 @@ import re
 import subprocess
 from collections import namedtuple
 from pathlib import Path
+from CheckPRTemplate import *
 
 import requests
 
-categories = [
-    'dynamic_to_static',
-    'executor',
-    'phi',
-    'python_frontend',
-    'cuda',
-    'distributed',
-    'inference',
-    'Uncategorized',
+PR_Category = [
+    'User Experience',
+    'Execute Infrastructure',
+    'Operator Mechanism',
+    'CINN',
+    'Custom Device',
+    'Performance Optimization',
+    'Distributed Strategy',
+    'Parameter Server',
+    'Communication Library',
+    'Auto Parallel',
+    'Inference',
+    'Environment Adaptation',
+    'Others',
 ]
 
-topics = [
-    'bc_breaking',
-    'deprecations',
-    'new_features',
-    'improvements',
-    'bug_fixes',
-    'performance',
-    'docs',
-    'devs',
-    'Untopiced',
-    "not user facing",
-    "security",
+PR_Types = [
+    'New features',
+    'Bug fixes',
+    'Improvements',
+    'Performance',
+    'BC Breaking',
+    'Deprecations',
+    'Docs',
+    'Devs',
+    'Not User Facing',
+    'Security',
+    'Deprecations',
+    'Others',
 ]
 
 
@@ -58,6 +65,8 @@ Features = namedtuple(
         'labels',
         'author',
         'accepters',
+        'pr_category',
+        'pr_types'
     ],
 )
 
@@ -159,6 +168,30 @@ def run_query(query):
         )
 
 
+def getPRTemplate(body):
+    PR_dic = {}
+    note = r'<!-- TemplateReference: https://github.com/PaddlePaddle/Paddle/wiki/PULL-REQUEST-TEMPLATE--REFERENCE -->\r\n|<!-- Demo: https://github.com/PaddlePaddle/Paddle/pull/24810 -->\r\n|<!-- One of \[ User Experience \| Execute Infrastructure \| Operator Mechanism \| CINN \| Custom Device \| Performance Optimization \| Distributed Strategy \| Parameter Server \| Communication Library \| Auto Parallel \| Inference \| Environment Adaptation \| Others \] -->|<!-- One of \[ New features \| Bug fixes \| Improvements \| Performance \| BC Breaking \| Deprecations \| Docs \| Devs \| Not User Facing \| Security \| Deprecations \| Others \] -->|<!-- Describe what you’ve done -->'
+    if body is None:
+        body = ''
+    body = re.sub(note, "", body)
+    body = re.sub("\r\n", "", body)
+    type_end = body.find('### PR Types')
+    changes_end = body.find('### Description')
+    PR_dic['PR Category'] = body[len('### PR Category') : type_end]
+    PR_dic['PR Types'] = body[type_end + len('### PR Types') : changes_end]
+    pr_category_res = ''
+    pr_type_res = ''
+    TemplateInfo = dict()
+
+    for key in PR_dic:
+        test_list = PR_Category if key == 'PR Category' else PR_Types
+        test_list_lower = [l.lower() for l in test_list]
+        value = PR_dic[key].strip().split(',')
+        TemplateInfo[key] = value
+
+    return TemplateInfo['PR Category'][0], TemplateInfo['PR Types'][0]
+
+
 def github_data(pr_number):
     query = (
         """
@@ -168,6 +201,7 @@ def github_data(pr_number):
           author {
             login
           }
+          body
           reviews(last: 5, states: APPROVED) {
             nodes {
               author {
@@ -194,12 +228,13 @@ def github_data(pr_number):
     labels = [edge['node']['name'] for edge in edges]
     author = query['data']['repository']['pullRequest']['author']['login']
     nodes = query['data']['repository']['pullRequest']['reviews']['nodes']
-
+    body = query['data']['repository']['pullRequest']['body']
+    
     # using set to dedup multiple accepts from same accepter
     accepters = {node["author"]["login"] for node in nodes if node and node["author"]}
     accepters = tuple(sorted(accepters))
 
-    return labels, author, accepters
+    return labels, author, accepters, body
 
 
 def get_features(commit_hash):
@@ -213,9 +248,10 @@ def get_features(commit_hash):
     author = ""
     accepters = tuple()
     if pr_number is not None:
-        labels, author, accepters = github_data(pr_number)
+        labels, author, accepters, pr_template = github_data(pr_number)
+        pr_category, pr_types = getPRTemplate(pr_template)
     result = Features(
-        title, body, pr_number, files_changed, labels, author, accepters
+        title, body, pr_number, files_changed, labels, author, accepters, pr_category, pr_types
     )
     return result
 

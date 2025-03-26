@@ -22,7 +22,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import List
 
-from common import features_to_dict, get_commit_data_cache, run, topics
+from common import features_to_dict, get_commit_data_cache, run
 
 """
 Example Usages
@@ -142,8 +142,10 @@ class CommitList:
     def categorize(features):
         title = features['title']
         labels = features['labels']
-        category = 'Uncategorized'
-        topic = 'Untopiced'
+        category = features['pr_category']
+        topic = features['pr_types']
+        # category = 'Uncategorized'
+        # topic = 'Untopiced'
 
         # We ask contributors to label their PR's appropriately
         # when they're first landed.
